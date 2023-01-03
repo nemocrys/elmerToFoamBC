@@ -1,3 +1,24 @@
+# cases
+.gz
+log.*
+log*
+postProcessing
+*~
+processor*
+[0-9]*
+[0-9]*.[0-9]*
+!0.org
+constant/extendedFeatureEdgeMesh
+*.eMesh
+constant/polyMesh/*
+!constant/polyMesh/blockMeshDict
+constant/cellToRegion
+*.OpenFOAM
+
+# lnInclude
+lnInclude
+linux64GccDPInt32Opt
+
 # Prerequisites
 *.d
 
