@@ -89,6 +89,36 @@ int main(int argc, char *argv[])
         fileName posName(file);
         IFstream inFile(posName);
 
+        // find max iteration
+        scalar maxIter(Zero);
+
+        while (inFile.good())
+        {
+            string line;
+            inFile.getLine(line);
+            scalar dd;
+            if (line.size()>1)
+            {
+                // Set up up a stream from this line
+                std::stringstream lineStr(line);
+
+                DynamicList<scalar> data;
+                string item;
+                while (lineStr >> dd)
+                {
+                    data.append(dd);
+                }
+                if (data[0] > maxIter)
+                {
+                    maxIter = data[0];
+                }
+            }
+        }
+
+        Info << "Only reading Elmer values of maxIter = " << maxIter << endl;
+        // Rewind the stream so that it may be read again.
+        inFile.rewind();
+        
         DynamicList<vector> coordinates;
         DynamicList<vector> gradient;
         DynamicList<scalar> value;
@@ -110,33 +140,32 @@ int main(int argc, char *argv[])
                     data.append(dd);
                 }
 
-                // permutation (x,y,z) -> (x,z,y)
-                vector coord(Zero);
-                forAll (coord, xi)
+                // write only last elmer iteration
+                if (data[0] == maxIter)
                 {
-                    coord[coordinatePermut[xi]] = data[coordStart+xi];
-                }            
-                
-
-                // read gradient
-                vector field(Zero);
-                for (int i=0;i<gradientSize;i++)
-                {
-                    field[coordinatePermut[0]] = data[gradientLabel+0];
+                    // read elmer coordinates
+                    // permutation (x,y,z) -> (x,z,y)
+                    vector coord(Zero);
+                    forAll (coord, xi)
+                    {
+                        coord[coordinatePermut[xi]] = data[coordStart+xi];
+                    }            
+                    
+                    // read elmer gradient
+                    vector field(Zero);
+                    for (int i=0;i<gradientSize;i++)
+                    {
+                        field[coordinatePermut[0]] = data[gradientLabel+0];
+                    }
+                    field[coordinatePermut[1]] = data[gradientLabel+1];
+                    
+                    coordinates.append(coord);
+                    gradient.append(field);
+                    // read elmer value
+                    value.append(data[valueLabel]);
                 }
-                field[coordinatePermut[1]] = data[gradientLabel+1];
-                coordinates.append(coord);
-                gradient.append(field);
-                value.append(data[valueLabel]);
-                }
+            }
         }
-
-        Info<< "  coordinates.size() = " << coordinates.size() << endl;
-        Info<< "  gradient.size() = " << gradient.size() << endl;
-        Info<< "  value.size() = " << value.size() << endl;
-        Info<< "  coordinates[points.size()-1] = " << coordinates[coordinates.size()-1] << endl;
-        Info<< "  gradient[gradient.size()-1] = " << gradient[gradient.size()-1] << endl;
-        Info<< "  value[value.size()-1] = " << value[value.size()-1] << endl;
 
         // ---
         Info<< "\nMapping data\n" << endl;
@@ -155,12 +184,21 @@ int main(int argc, char *argv[])
             mesh
         );
 
-        scalarField gradT(T.boundaryField()[currPatchID].size(),Zero);  
+        scalarField gradT(T.boundaryField()[currPatchID].size(),Zero); 
+        vectorField gradTFull(T.boundaryField()[currPatchID].size(),Zero);  
         vectorField Nf = mesh.boundary()[currPatchID].nf(); 
         
         scalar maxdistall = -1000;
         
         // map elmer values to OpenFOAM faces
+        Info << endl << "Mapping file " 
+             << file
+             << " to boundary " 
+             << T.boundaryField()[currPatchID].patch().name()
+             << " with type " 
+             << T.boundaryField()[currPatchID].type()
+             << endl;
+        
         forAll(T.boundaryField()[currPatchID], facesi) 
         {
             vector p = mesh.Cf().boundaryField()[currPatchID][facesi];
@@ -212,8 +250,6 @@ int main(int argc, char *argv[])
             {
                 // write nearest value to current patch
                 T.boundaryFieldRef()[currPatchID][facesi] = value[minpoint];
-                // Info << T.boundaryField()[currPatchID].snGrad() << endl;
-                // Info << gradT << endl;
 
                 vector vecRot(Zero);
                 if (p.x()>1e-10) 
@@ -227,24 +263,43 @@ int main(int argc, char *argv[])
                     vecRot.y() = 0;
                 }
                 
-                vecRot.z() = gradient[minpoint].y();
+                vecRot.z() = gradient[minpoint].z();
                 
                 vector N = Nf[facesi];
                 gradT[facesi] = ( N & vecRot ); // grad in normal direction
-                // Info << gradT[facesi] << endl;
+                gradTFull[facesi] = vecRot;
+                // Info << "gradient[minpoint] = "  << gradient[minpoint] << endl;
+                // Info << "vecRot = " <<  vecRot << endl;
+                // Info << "N = " << N << endl;
+                // Info <<  "gradT[facesi] = "<<  gradT[facesi] << endl;
             }
             
             // Info << "; nearest elmer neighbor = " << coordinates[minpoint] << endl;
 
         } // forAll
         
-        Info<< ";  maxdistall = " << maxdistall << endl;
+        Info<< "Max distance between mapping = " << maxdistall << endl;
+
+        // write gradient value for boundaries of type fixedGradient
+        if
+        (
+            T.boundaryField()[currPatchID].type() 
+            == "fixedGradient"
+        )
+        {
+            fixedGradientFvPatchScalarField& gradTPatch =
+                refCast<fixedGradientFvPatchScalarField>
+                (
+                    const_cast<fvPatchScalarField&>
+                    (
+                        T.boundaryField()[currPatchID]
+                    )
+                );
+            gradTPatch.gradient() = gradT;
+            // Info << gradTPatch.gradient()<< endl;
+        }
         
-        // THIS IS NOT WRITTEN...
-        T.boundaryField()[currPatchID].snGrad() = gradT;
-        
-        // Info << T.boundaryField()[currPatchID].gradient() << endl;
-        
+        // Write T field
         T.write();
 
         // write out data for testing
@@ -252,13 +307,18 @@ int main(int argc, char *argv[])
         (
             boundaryDict.keys()[boundaryI]
         );
+
         forAll (T.boundaryField()[currPatchID], facesi)
         {
             vector p = mesh.Cf().boundaryField()[currPatchID][facesi];
             osTesting  << float(p.x()) << ' '
             << float(p.y()) << ' '
             << float(p.z()) << ' '
-            << T.boundaryField()[currPatchID][facesi] 
+            << T.boundaryField()[currPatchID][facesi] << ' '
+            << gradT[facesi] << ' ' 
+            << gradTFull[facesi].x() << ' ' 
+            << gradTFull[facesi].y() << ' ' 
+            << gradTFull[facesi].z()
             << nl;
         }
 
@@ -284,7 +344,7 @@ int main(int argc, char *argv[])
         );
         Info<< "Writing points to " << os.name() << nl;
         os  << "// Points" << nl;
-        os << coordinatesOnMesh << nl;
+        os << coordinates << nl;
 
         OFstream osVector
         (
@@ -292,7 +352,7 @@ int main(int argc, char *argv[])
         );
         Info<< "Writing vector field to " << osVector.name() << nl;
         osVector  << "// Data on points"  << nl;
-        osVector << gradientOnMesh << nl;
+        osVector << gradient << nl;
         
         OFstream osScalar
         (
@@ -300,7 +360,7 @@ int main(int argc, char *argv[])
         );
         Info<< "Writing scalar field to " << osScalar.name() << nl;
         osScalar  << "// Data on points"  << nl;
-        osScalar << valueOnMesh << nl;
+        osScalar << value << nl;
     
     }
 
