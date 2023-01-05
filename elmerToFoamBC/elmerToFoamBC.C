@@ -280,6 +280,103 @@ int main(int argc, char *argv[])
         
         Info<< "Max distance between mapping = " << maxdistall << endl;
 
+        // Other mapping method
+        forAll(T.boundaryField()[currPatchID], facesi) 
+        {
+            vector p = mesh.Cf().boundaryField()[currPatchID][facesi];
+            vector por = p;
+            // find 3 nearest points to p
+            label minpoint1=0, minpoint2=0, minpoint3=0;
+            scalar mindist = 1000;
+            for (label i=0; i<coordinates.size(); i++) 
+            {
+                scalar dist = mag(p-coordinates[i]);
+                if (dist < mindist) { mindist = dist;  minpoint1 = i; }
+            }
+            if (mindist>maxdistall) { maxdistall = mindist; }
+
+            mindist = 1000;
+            for (label i=0; i<coordinates.size(); i++) 
+                {
+                scalar dist = mag(p-coordinates[i]);
+                if (dist < mindist && i!=minpoint1) { mindist = dist;  minpoint2 = i; }
+                }
+            if (mindist>maxdistall) { maxdistall = mindist; }
+
+            mindist = 1000;
+            for (label i=0; i<coordinates.size(); i++) 
+                {
+                scalar dist = mag(p-coordinates[i]);
+                if (dist < mindist && i!=minpoint1 && i!=minpoint2) { mindist = dist;  minpoint3 = i; }
+                }
+            if (mindist>maxdistall) { maxdistall = mindist; }
+
+            // Info << "minpoint1 = " << minpoint1
+            //      << "; minpoint2 = " << minpoint2
+            //      << "; minpoint3 = " << minpoint3 
+            //      << endl;
+            // Info << "p = " << p << endl;
+            // Info << "coordinates1 = " << coordinates[minpoint1]
+            //      << "; coordinates2 = " << coordinates[minpoint2]
+            //      << "; coordinates3 = " << coordinates[minpoint3]
+            //      << endl;
+
+            // weighted average of 2 nearest points
+            scalar dist1 = mag(p-coordinates[minpoint1]);
+            scalar dist2 = mag(p-coordinates[minpoint2]);
+            // write nearest value to current patch
+            // Info << dist1/(dist1+dist2) << endl;
+            scalar w = dist1/(dist1+dist2);
+            scalar interpValue = (1-w)*value[minpoint1] + w*value[minpoint2];
+            // Info << "dist1 = " << dist1 << "; dist2 = " << dist2 << "; w =" << w << endl;
+            // Info << "value[minpoint1]" << value[minpoint1] 
+            //     << "value[minpoint2]" << value[minpoint2] 
+            //     << "interpValue = " << interpValue << endl;
+            if
+            (
+                T.boundaryField()[currPatchID].type() 
+                == "fixedValue"
+                ||
+                T.boundaryField()[currPatchID].type() 
+                == "timeVaryingMappedFixedValue"
+            )
+            {
+                // write nearest value to current patch
+                T.boundaryFieldRef()[currPatchID][facesi] = interpValue;
+            }
+            if
+            (
+                T.boundaryField()[currPatchID].type() 
+                == "fixedGradient"
+            )
+            {
+                // write nearest value to current patch
+                T.boundaryFieldRef()[currPatchID][facesi] = interpValue;
+                vector interpValue = (1-w)*gradient[minpoint1] + w*gradient[minpoint2];
+                vector vecRot(Zero);
+                if (p.x()>1e-10) 
+                {
+                    vecRot.x() = interpValue.x()*por.x()/(p.x()+SMALL);
+                    vecRot.y() = interpValue.x()*por.y()/(p.x()+SMALL); 
+                }
+                else 
+                {
+                    vecRot.x() = 0;
+                    vecRot.y() = 0;
+                }
+                
+                vecRot.z() = interpValue.z();
+                
+                vector N = Nf[facesi];
+                gradT[facesi] = ( N & vecRot ); // grad in normal direction
+                gradTFull[facesi] = vecRot;
+                // Info << "interpValue = "  << interpValue << endl;
+                // Info << "vecRot = " <<  vecRot << endl;
+                // Info << "N = " << N << endl;
+                // Info <<  "gradT[facesi] = "<<  gradT[facesi] << endl;
+            }
+        }
+
         // write gradient value for boundaries of type fixedGradient
         if
         (
