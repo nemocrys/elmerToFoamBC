@@ -54,6 +54,8 @@ int main(int argc, char *argv[])
     Info << elmerToFoamDict << endl;
     
     // INPUT
+    // interpolation method
+    const word method = elmerToFoamDict.getOrDefault<word>("method", "interp1");
     // permutation (x,y,z) -> (x,z,y)
     const vector coordinatePermut(elmerToFoamDict.lookup("coordinatePermut"));
     // column of x
@@ -75,10 +77,21 @@ int main(int argc, char *argv[])
 
     forAll (boundaryDict.keys(), boundaryI)
     {
+        Info << "here"<<endl;
         const label& currPatchID = 
                 mesh.boundary().findPatchID(boundaryDict.keys()[boundaryI]);
 
         file = boundaryDict.get<word>(boundaryDict.keys()[boundaryI]);
+
+        if(currPatchID==-1)
+        {
+            FatalErrorInFunction
+                << "Patch "
+                << boundaryDict.keys()[boundaryI] 
+                << " not found." << endl 
+                << abort(FatalError);
+        }
+
         Info << endl << "Reading file " 
              << file
              << " for boundary " 
@@ -286,7 +299,7 @@ int main(int argc, char *argv[])
             vector p = mesh.Cf().boundaryField()[currPatchID][facesi];
             vector por = p;
             // find 3 nearest points to p
-            label minpoint1=0, minpoint2=0, minpoint3=0;
+            label minpoint1=0, minpoint2=0;
             scalar mindist = 1000;
             for (label i=0; i<coordinates.size(); i++) 
             {
@@ -303,13 +316,13 @@ int main(int argc, char *argv[])
                 }
             if (mindist>maxdistall) { maxdistall = mindist; }
 
-            mindist = 1000;
-            for (label i=0; i<coordinates.size(); i++) 
-                {
-                scalar dist = mag(p-coordinates[i]);
-                if (dist < mindist && i!=minpoint1 && i!=minpoint2) { mindist = dist;  minpoint3 = i; }
-                }
-            if (mindist>maxdistall) { maxdistall = mindist; }
+            // mindist = 1000;
+            // for (label i=0; i<coordinates.size(); i++) 
+            //     {
+            //     scalar dist = mag(p-coordinates[i]);
+            //     if (dist < mindist && i!=minpoint1 && i!=minpoint2) { mindist = dist;  minpoint3 = i; }
+            //     }
+            // if (mindist>maxdistall) { maxdistall = mindist; }
 
             // Info << "minpoint1 = " << minpoint1
             //      << "; minpoint2 = " << minpoint2
@@ -400,9 +413,18 @@ int main(int argc, char *argv[])
         T.write();
 
         // write out data for testing
+        const word testDir = "debugElmerToFoamBC";
+
+        if (!exists(testDir))
+        {
+            mkDir(
+                testDir
+                );
+        }
+
         OFstream osTesting
         (
-            boundaryDict.keys()[boundaryI]
+            testDir/boundaryDict.keys()[boundaryI]
         );
 
         forAll (T.boundaryField()[currPatchID], facesi)
@@ -458,7 +480,7 @@ int main(int argc, char *argv[])
         Info<< "Writing scalar field to " << osScalar.name() << nl;
         osScalar  << "// Data on points"  << nl;
         osScalar << value << nl;
-    
+
     }
 
     Info << endl << "End\n" << endl;
