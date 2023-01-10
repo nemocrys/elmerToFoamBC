@@ -51,11 +51,18 @@ int main(int argc, char *argv[])
             IOobject::NO_WRITE
         )
     );
-    Info << elmerToFoamDict << endl;
     
     // INPUT
+    // debug flag
+    const label debug = elmerToFoamDict.getOrDefault<label>("debug", true);
     // interpolation method
     const word method = elmerToFoamDict.getOrDefault<word>("method", "interp1");
+    if (!(method == "nearest" ||method == "interp1"))
+    {
+         FatalErrorInFunction
+            << "Interpolation method not supported. Available methods are:\n"
+            << "nearest\ninterp1";
+    }
     // permutation (x,y,z) -> (x,z,y)
     const vector coordinatePermut(elmerToFoamDict.lookup("coordinatePermut"));
     // column of x
@@ -74,10 +81,10 @@ int main(int argc, char *argv[])
     const dictionary& boundaryDict(elmerToFoamDict.subDict("boundary"));
     word file(" ");
 
+    if (debug) {Info << elmerToFoamDict << endl;}
 
     forAll (boundaryDict.keys(), boundaryI)
     {
-        Info << "here"<<endl;
         const label& currPatchID = 
                 mesh.boundary().findPatchID(boundaryDict.keys()[boundaryI]);
 
@@ -180,9 +187,6 @@ int main(int argc, char *argv[])
             }
         }
 
-        // ---
-        Info<< "\nMapping data\n" << endl;
-
         Info<< "Reading field T\n" << endl;
         volScalarField T
         (
@@ -198,197 +202,175 @@ int main(int argc, char *argv[])
         );
 
         scalarField gradT(T.boundaryField()[currPatchID].size(),Zero); 
-        vectorField gradTFull(T.boundaryField()[currPatchID].size(),Zero);  
-        vectorField Nf = mesh.boundary()[currPatchID].nf(); 
+        vectorField gradTComp(T.boundaryField()[currPatchID].size(),Zero);  
+
         
+        vectorField Nf = mesh.boundary()[currPatchID].nf(); 
         scalar maxdistall = -1000;
         
         // map elmer values to OpenFOAM faces
-        Info << endl << "Mapping file " 
+        Info << "Mapping file " 
              << file
              << " to boundary " 
              << T.boundaryField()[currPatchID].patch().name()
              << " with type " 
              << T.boundaryField()[currPatchID].type()
              << endl;
-        
-        forAll(T.boundaryField()[currPatchID], facesi) 
+                
+        Info<< "Interpolation method: "
+            << method << endl;
+
+        // Interpolation method with nearest neighbor
+        if (method == "nearest")
         {
-            vector p = mesh.Cf().boundaryField()[currPatchID][facesi];
-            // Info << "current mesh point = " << p;
-            vector por = p;
-
-            // project to xz plane
-            scalar rr = Foam::sqrt( p.x()*p.x() + p.y()*p.y() );
-            p.x() = rr;
-            p.y() = 0;
-            p.z() = p.z();
-            // Info << "; projected mesh point = " << p;
-
-            // find nearest neighbour
-            scalar mindist = 1000;
-            label minpoint = 0;
-            for (label i=0; i<coordinates.size(); i++) 
+            forAll(T.boundaryField()[currPatchID], facesi) 
             {
-                scalar dist = mag(p-coordinates[i]);
-                if (dist < mindist) 
+                vector p = mesh.Cf().boundaryField()[currPatchID][facesi];
+                // Info << "current mesh point = " << p;
+                vector por = p;
+
+                // project to xz plane
+                scalar rr = Foam::sqrt( p.x()*p.x() + p.y()*p.y() );
+                p.x() = rr;
+                p.y() = 0;
+                p.z() = p.z();
+                // Info << "; projected mesh point = " << p;
+
+                // find nearest neighbour
+                scalar mindist = 1000;
+                label minpoint = 0;
+                for (label i=0; i<coordinates.size(); i++) 
+                {
+                    scalar dist = mag(p-coordinates[i]);
+                    if (dist < mindist) 
+                    { 
+                        mindist = dist;  
+                        minpoint = i; 
+                    }
+                }
+
+                if (mindist>maxdistall) 
                 { 
-                    mindist = dist;  
-                    minpoint = i; 
+                    maxdistall = mindist; 
                 }
-            }
 
-            if (mindist>maxdistall) 
-            { 
-                maxdistall = mindist; 
-            }
-
-            if
-            (
-                T.boundaryField()[currPatchID].type() 
-                == "fixedValue"
-                ||
-                T.boundaryField()[currPatchID].type() 
-                == "timeVaryingMappedFixedValue"
-            )
-            {
-                // write nearest value to current patch
-                T.boundaryFieldRef()[currPatchID][facesi] = value[minpoint];
-            }
-            if
-            (
-                T.boundaryField()[currPatchID].type() 
-                == "fixedGradient"
-            )
-            {
-                // write nearest value to current patch
-                T.boundaryFieldRef()[currPatchID][facesi] = value[minpoint];
-
-                vector vecRot(Zero);
-                if (p.x()>1e-10) 
+                if
+                (
+                    T.boundaryField()[currPatchID].type() 
+                    == "fixedValue"
+                    ||
+                    T.boundaryField()[currPatchID].type() 
+                    == "timeVaryingMappedFixedValue"
+                )
                 {
-                    vecRot.x() = gradient[minpoint].x()*por.x()/(p.x()+SMALL);
-                    vecRot.y() = gradient[minpoint].x()*por.y()/(p.x()+SMALL); 
+                    // write nearest value to current patch
+                    T.boundaryFieldRef()[currPatchID][facesi] = value[minpoint];
                 }
-                else 
+                if
+                (
+                    T.boundaryField()[currPatchID].type() 
+                    == "fixedGradient"
+                )
                 {
-                    vecRot.x() = 0;
-                    vecRot.y() = 0;
-                }
-                
-                vecRot.z() = gradient[minpoint].z();
-                
-                vector N = Nf[facesi];
-                gradT[facesi] = ( N & vecRot ); // grad in normal direction
-                gradTFull[facesi] = vecRot;
-                // Info << "gradient[minpoint] = "  << gradient[minpoint] << endl;
-                // Info << "vecRot = " <<  vecRot << endl;
-                // Info << "N = " << N << endl;
-                // Info <<  "gradT[facesi] = "<<  gradT[facesi] << endl;
-            }
-            
-            // Info << "; nearest elmer neighbor = " << coordinates[minpoint] << endl;
+                    // write nearest value to current patch
+                    T.boundaryFieldRef()[currPatchID][facesi] = value[minpoint];
 
-        } // forAll
-        
+                    vector vecRot(Zero);
+                    if (p.x()>1e-10) 
+                    {
+                        vecRot.x() = gradient[minpoint].x()*por.x()/(p.x()+SMALL);
+                        vecRot.y() = gradient[minpoint].x()*por.y()/(p.x()+SMALL); 
+                    }
+                    else 
+                    {
+                        vecRot.x() = 0;
+                        vecRot.y() = 0;
+                    }
+                    
+                    vecRot.z() = gradient[minpoint].z();
+                    
+                    vector N = Nf[facesi];
+                    gradT[facesi] = ( N & vecRot ); // grad in normal direction
+                    if (debug) {gradTComp[facesi] = vecRot;}
+                }
+            } // forAll
         Info<< "Max distance between mapping = " << maxdistall << endl;
+        } // if nearest
 
-        // Other mapping method
-        forAll(T.boundaryField()[currPatchID], facesi) 
+        // Interpolation method linear between two nearest points
+        if (method == "interp1")
         {
-            vector p = mesh.Cf().boundaryField()[currPatchID][facesi];
-            vector por = p;
-            // find 3 nearest points to p
-            label minpoint1=0, minpoint2=0;
-            scalar mindist = 1000;
-            for (label i=0; i<coordinates.size(); i++) 
+            forAll(T.boundaryField()[currPatchID], facesi) 
             {
-                scalar dist = mag(p-coordinates[i]);
-                if (dist < mindist) { mindist = dist;  minpoint1 = i; }
-            }
-            if (mindist>maxdistall) { maxdistall = mindist; }
-
-            mindist = 1000;
-            for (label i=0; i<coordinates.size(); i++) 
+                vector p = mesh.Cf().boundaryField()[currPatchID][facesi];
+                vector por = p;
+                // find 2 nearest points to p
+                label minpoint1=0, minpoint2=0;
+                scalar mindist = 1000;
+                for (label i=0; i<coordinates.size(); i++) 
                 {
-                scalar dist = mag(p-coordinates[i]);
-                if (dist < mindist && i!=minpoint1) { mindist = dist;  minpoint2 = i; }
+                    scalar dist = mag(p-coordinates[i]);
+                    if (dist < mindist) { mindist = dist;  minpoint1 = i; }
                 }
-            if (mindist>maxdistall) { maxdistall = mindist; }
+                if (mindist>maxdistall) { maxdistall = mindist; }
 
-            // mindist = 1000;
-            // for (label i=0; i<coordinates.size(); i++) 
-            //     {
-            //     scalar dist = mag(p-coordinates[i]);
-            //     if (dist < mindist && i!=minpoint1 && i!=minpoint2) { mindist = dist;  minpoint3 = i; }
-            //     }
-            // if (mindist>maxdistall) { maxdistall = mindist; }
+                mindist = 1000;
+                for (label i=0; i<coordinates.size(); i++) 
+                    {
+                    scalar dist = mag(p-coordinates[i]);
+                    if (dist < mindist && i!=minpoint1) { mindist = dist;  minpoint2 = i; }
+                    }
+                if (mindist>maxdistall) { maxdistall = mindist; }
 
-            // Info << "minpoint1 = " << minpoint1
-            //      << "; minpoint2 = " << minpoint2
-            //      << "; minpoint3 = " << minpoint3 
-            //      << endl;
-            // Info << "p = " << p << endl;
-            // Info << "coordinates1 = " << coordinates[minpoint1]
-            //      << "; coordinates2 = " << coordinates[minpoint2]
-            //      << "; coordinates3 = " << coordinates[minpoint3]
-            //      << endl;
-
-            // weighted average of 2 nearest points
-            scalar dist1 = mag(p-coordinates[minpoint1]);
-            scalar dist2 = mag(p-coordinates[minpoint2]);
-            // write nearest value to current patch
-            // Info << dist1/(dist1+dist2) << endl;
-            scalar w = dist1/(dist1+dist2);
-            scalar interpValue = (1-w)*value[minpoint1] + w*value[minpoint2];
-            // Info << "dist1 = " << dist1 << "; dist2 = " << dist2 << "; w =" << w << endl;
-            // Info << "value[minpoint1]" << value[minpoint1] 
-            //     << "value[minpoint2]" << value[minpoint2] 
-            //     << "interpValue = " << interpValue << endl;
-            if
-            (
-                T.boundaryField()[currPatchID].type() 
-                == "fixedValue"
-                ||
-                T.boundaryField()[currPatchID].type() 
-                == "timeVaryingMappedFixedValue"
-            )
-            {
+                // weighted average of 2 nearest points
+                scalar dist1 = mag(p-coordinates[minpoint1]);
+                scalar dist2 = mag(p-coordinates[minpoint2]);
                 // write nearest value to current patch
-                T.boundaryFieldRef()[currPatchID][facesi] = interpValue;
-            }
-            if
-            (
-                T.boundaryField()[currPatchID].type() 
-                == "fixedGradient"
-            )
-            {
-                // write nearest value to current patch
-                T.boundaryFieldRef()[currPatchID][facesi] = interpValue;
-                vector interpValue = (1-w)*gradient[minpoint1] + w*gradient[minpoint2];
-                vector vecRot(Zero);
-                if (p.x()>1e-10) 
+                scalar w = dist1/(dist1+dist2);
+                scalar interpValue = (1-w)*value[minpoint1] + w*value[minpoint2];
+
+                if
+                (
+                    T.boundaryField()[currPatchID].type() 
+                    == "fixedValue"
+                    ||
+                    T.boundaryField()[currPatchID].type() 
+                    == "timeVaryingMappedFixedValue"
+                )
                 {
-                    vecRot.x() = interpValue.x()*por.x()/(p.x()+SMALL);
-                    vecRot.y() = interpValue.x()*por.y()/(p.x()+SMALL); 
+                    // write nearest value to current patch
+                    T.boundaryFieldRef()[currPatchID][facesi] = interpValue;
                 }
-                else 
+                if
+                (
+                    T.boundaryField()[currPatchID].type() 
+                    == "fixedGradient"
+                )
                 {
-                    vecRot.x() = 0;
-                    vecRot.y() = 0;
+                    // write nearest value to current patch
+                    T.boundaryFieldRef()[currPatchID][facesi] = interpValue;
+                    vector interpValue = (1-w)*gradient[minpoint1] + w*gradient[minpoint2];
+                    vector vecRot(Zero);
+                    if (p.x()>1e-10) 
+                    {
+                        vecRot.x() = interpValue.x()*por.x()/(p.x()+SMALL);
+                        vecRot.y() = interpValue.x()*por.y()/(p.x()+SMALL); 
+                    }
+                    else 
+                    {
+                        vecRot.x() = 0;
+                        vecRot.y() = 0;
+                    }
+                    
+                    vecRot.z() = interpValue.z();
+                    
+                    vector N = Nf[facesi];
+                    gradT[facesi] = ( N & vecRot ); // grad in normal direction
+                    if(debug){gradTComp[facesi] = vecRot;} // grad components
+
                 }
-                
-                vecRot.z() = interpValue.z();
-                
-                vector N = Nf[facesi];
-                gradT[facesi] = ( N & vecRot ); // grad in normal direction
-                gradTFull[facesi] = vecRot;
-                // Info << "interpValue = "  << interpValue << endl;
-                // Info << "vecRot = " <<  vecRot << endl;
-                // Info << "N = " << N << endl;
-                // Info <<  "gradT[facesi] = "<<  gradT[facesi] << endl;
-            }
-        }
+            } // forAll
+        } //if
 
         // write gradient value for boundaries of type fixedGradient
         if
@@ -406,81 +388,82 @@ int main(int argc, char *argv[])
                     )
                 );
             gradTPatch.gradient() = gradT;
-            // Info << gradTPatch.gradient()<< endl;
         }
         
         // Write T field
         T.write();
 
-        // write out data for testing
-        const word testDir = "debugElmerToFoamBC";
-
-        if (!exists(testDir))
+        if (debug)
         {
-            mkDir(
-                testDir
-                );
+            // write out data for testing
+            const word testDir = "debugElmerToFoamBC";
+
+            if (!exists(testDir))
+            {
+                mkDir(
+                    testDir
+                    );
+            }
+
+            OFstream osTesting
+            (
+                testDir/boundaryDict.keys()[boundaryI]
+            );
+
+            forAll (T.boundaryField()[currPatchID], facesi)
+            {
+                vector p = mesh.Cf().boundaryField()[currPatchID][facesi];
+                osTesting  << float(p.x()) << ' '
+                << float(p.y()) << ' '
+                << float(p.z()) << ' '
+                << T.boundaryField()[currPatchID][facesi] << ' '
+                << gradT[facesi] << ' ' 
+                << gradTComp[facesi].x() << ' ' 
+                << gradTComp[facesi].y() << ' ' 
+                << gradTComp[facesi].z()
+                << nl;
+            }
+
+            // Write out points to constant/boundaryData/*
+            const word outDir = runTime.constant()/
+                                "boundaryData"/
+                                boundaryDict.keys()[boundaryI];
+
+            if (!exists(outDir/"0"))
+            {
+                mkDir(
+                    outDir/"0"
+                    );
+            }
+
+            scalarField valueOnMesh(T.boundaryFieldRef()[currPatchID]);
+            scalarField gradientOnMesh(gradT);
+            vectorField coordinatesOnMesh(mesh.Cf().boundaryField()[currPatchID]);
+
+            OFstream os
+            (
+                outDir/"points"
+            );
+            Info<< "Writing points to " << os.name() << nl;
+            os  << "// Points" << nl;
+            os << coordinates << nl;
+
+            OFstream osVector
+            (
+                outDir/"0"/vName
+            );
+            Info<< "Writing vector field to " << osVector.name() << nl;
+            osVector  << "// Data on points"  << nl;
+            osVector << gradient << nl;
+            
+            OFstream osScalar
+            (
+                outDir/"0"/sName
+            );
+            Info<< "Writing scalar field to " << osScalar.name() << nl;
+            osScalar  << "// Data on points"  << nl;
+            osScalar << value << nl;
         }
-
-        OFstream osTesting
-        (
-            testDir/boundaryDict.keys()[boundaryI]
-        );
-
-        forAll (T.boundaryField()[currPatchID], facesi)
-        {
-            vector p = mesh.Cf().boundaryField()[currPatchID][facesi];
-            osTesting  << float(p.x()) << ' '
-            << float(p.y()) << ' '
-            << float(p.z()) << ' '
-            << T.boundaryField()[currPatchID][facesi] << ' '
-            << gradT[facesi] << ' ' 
-            << gradTFull[facesi].x() << ' ' 
-            << gradTFull[facesi].y() << ' ' 
-            << gradTFull[facesi].z()
-            << nl;
-        }
-
-        // Write out points to constant/boundaryData/*
-        const word outDir = runTime.constant()/
-                            "boundaryData"/
-                            boundaryDict.keys()[boundaryI];
-
-        if (!exists(outDir/"0"))
-        {
-            mkDir(
-                outDir/"0"
-                );
-        }
-
-        scalarField valueOnMesh(T.boundaryFieldRef()[currPatchID]);
-        scalarField gradientOnMesh(gradT);
-        vectorField coordinatesOnMesh(mesh.Cf().boundaryField()[currPatchID]);
-
-        OFstream os
-        (
-            outDir/"points"
-        );
-        Info<< "Writing points to " << os.name() << nl;
-        os  << "// Points" << nl;
-        os << coordinates << nl;
-
-        OFstream osVector
-        (
-            outDir/"0"/vName
-        );
-        Info<< "Writing vector field to " << osVector.name() << nl;
-        osVector  << "// Data on points"  << nl;
-        osVector << gradient << nl;
-        
-        OFstream osScalar
-        (
-            outDir/"0"/sName
-        );
-        Info<< "Writing scalar field to " << osScalar.name() << nl;
-        osScalar  << "// Data on points"  << nl;
-        osScalar << value << nl;
-
     }
 
     Info << endl << "End\n" << endl;
