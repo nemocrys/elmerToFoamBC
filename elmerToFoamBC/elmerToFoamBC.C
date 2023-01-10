@@ -73,10 +73,6 @@ int main(int argc, char *argv[])
     const label gradientLabel(elmerToFoamDict.get<label>("gradientLabel"));
     // size of gradient in elmer (with permutation)
     const label gradientSize(elmerToFoamDict.get<label>("gradientSize"));
-    // name of value
-    const word sName(elmerToFoamDict.lookup("valueName"));
-    // name of gradient
-    const word vName(elmerToFoamDict.lookup("gradientName"));
 
     const dictionary& boundaryDict(elmerToFoamDict.subDict("boundary"));
     word file(" ");
@@ -187,7 +183,7 @@ int main(int argc, char *argv[])
             }
         }
 
-        Info<< "Reading field T\n" << endl;
+        Info<< "Reading field T" << endl;
         volScalarField T
         (
             IOobject
@@ -379,6 +375,7 @@ int main(int argc, char *argv[])
             == "fixedGradient"
         )
         {
+            Info<< "Writing gradient" << endl;
             fixedGradientFvPatchScalarField& gradTPatch =
                 refCast<fixedGradientFvPatchScalarField>
                 (
@@ -391,6 +388,7 @@ int main(int argc, char *argv[])
         }
         
         // Write T field
+        Info<< "Writing value" << endl;
         T.write();
 
         if (debug)
@@ -450,7 +448,7 @@ int main(int argc, char *argv[])
 
             OFstream osVector
             (
-                outDir/"0"/vName
+                outDir/"0/T"
             );
             Info<< "Writing vector field to " << osVector.name() << nl;
             osVector  << "// Data on points"  << nl;
@@ -458,7 +456,7 @@ int main(int argc, char *argv[])
             
             OFstream osScalar
             (
-                outDir/"0"/sName
+                outDir/"0/gradT"
             );
             Info<< "Writing scalar field to " << osScalar.name() << nl;
             osScalar  << "// Data on points"  << nl;
