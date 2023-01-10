@@ -1,0 +1,39 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2112                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    arch        "LSB;label=32;scalar=64";
+    class       dictionary;
+    location    "system";
+    object      elmerToFoamDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+coordinatePermut    (0 2 1); // (x,y,z) -> (x,z,y)
+
+coordStartColumn    3; // column of first coordinate in elmer files
+
+valueLabel    13; // column of value in elmer files
+
+gradientLabel    20; // column of first gradient component in elmer files
+
+gradientSize     2; // number of gradient components in elmer files
+
+mapMethod       interp1; //#nearest (optional)
+
+debug		true; // debug flag for additional output
+
+boundary //(boundaries in this dict are overwritten)
+{
+	freeSurf	    "save_line_melt_surf.dat";
+    crysInter	    "save_line_melt_crys.dat";
+    crucibleSide	"save_line_crc_melt.dat";
+    crucibleBot	    "save_line_crc_melt.dat";
+}
