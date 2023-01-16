@@ -169,10 +169,8 @@ int main(int argc, char *argv[])
                     
                     // read elmer gradient
                     vector field(Zero);
-                    for (int i=0;i<gradientSize;i++)
-                    {
-                        field[coordinatePermut[0]] = data[gradientLabel+0];
-                    }
+
+                    field[coordinatePermut[0]] = data[gradientLabel+0];
                     field[coordinatePermut[1]] = data[gradientLabel+1];
                     
                     coordinates.append(coord);
@@ -350,7 +348,7 @@ int main(int argc, char *argv[])
                     if (p.x()>1e-10) 
                     {
                         vecRot.x() = interpValue.x()*por.x()/(p.x()+SMALL);
-                        vecRot.y() = interpValue.x()*por.y()/(p.x()+SMALL); 
+                        vecRot.z() = interpValue.x()*por.z()/(p.x()+SMALL); 
                     }
                     else 
                     {
@@ -358,7 +356,7 @@ int main(int argc, char *argv[])
                         vecRot.y() = 0;
                     }
                     
-                    vecRot.z() = interpValue.z();
+                    vecRot.y() = interpValue.y();
                     
                     vector N = Nf[facesi];
                     gradT[facesi] = ( N & vecRot ); // grad in normal direction
