@@ -53,44 +53,42 @@ int main(int argc, char *argv[])
     );
     
     // INPUT
-    // debug flag
-    const label debug = elmerToFoamDict.getOrDefault<label>("debug", true);
+    // debug_ flag
+    const label debug_ = elmerToFoamDict.getOrDefault<label>("debug", true);
     // interpolation method
-    const word method = elmerToFoamDict.getOrDefault<word>("method", "interp1");
-    if (!(method == "nearest" ||method == "interp1"))
+    const word method_ = elmerToFoamDict.getOrDefault<word>("mapMethod", "interp1");
+    if (!(method_ == "nearest" ||method_ == "interp1"))
     {
          FatalErrorInFunction
             << "Interpolation method not supported. Available methods are:\n"
             << "nearest\ninterp1";
     }
     // permutation (x,y,z) -> (x,z,y)
-    const vector coordinatePermut(elmerToFoamDict.lookup("coordinatePermut"));
+    const vector coordinatePermut_(elmerToFoamDict.lookup("coordinatePermut"));
     // column of x
-    const label coordStart(elmerToFoamDict.get<label>("coordStartColumn"));
+    const label coordStart_(elmerToFoamDict.get<label>("coordStartColumn"));
     // column of value to read
-    const label valueLabel(elmerToFoamDict.get<label>("valueLabel"));
+    const label valueLabel_(elmerToFoamDict.get<label>("valueLabel"));
     // column of gradient to read
-    const label gradientLabel(elmerToFoamDict.get<label>("gradientLabel"));
-    // size of gradient in elmer (with permutation)
-    const label gradientSize(elmerToFoamDict.get<label>("gradientSize"));
+    const label gradientLabel_(elmerToFoamDict.get<label>("gradientLabel"));
 
-    const dictionary& boundaryDict(elmerToFoamDict.subDict("boundary"));
+    const dictionary& boundaryDict_(elmerToFoamDict.subDict("boundary"));
     word file(" ");
 
-    if (debug) {Info << elmerToFoamDict << endl;}
+    if (debug_) {Info << elmerToFoamDict << endl;}
 
-    forAll (boundaryDict.keys(), boundaryI)
+    forAll (boundaryDict_.keys(), boundaryI)
     {
         const label& currPatchID = 
-                mesh.boundary().findPatchID(boundaryDict.keys()[boundaryI]);
+                mesh.boundary().findPatchID(boundaryDict_.keys()[boundaryI]);
 
-        file = boundaryDict.get<word>(boundaryDict.keys()[boundaryI]);
+        file = boundaryDict_.get<word>(boundaryDict_.keys()[boundaryI]);
 
         if(currPatchID==-1)
         {
             FatalErrorInFunction
                 << "Patch "
-                << boundaryDict.keys()[boundaryI] 
+                << boundaryDict_.keys()[boundaryI] 
                 << " not found." << endl 
                 << abort(FatalError);
         }
@@ -164,19 +162,19 @@ int main(int argc, char *argv[])
                     vector coord(Zero);
                     forAll (coord, xi)
                     {
-                        coord[coordinatePermut[xi]] = data[coordStart+xi];
+                        coord[coordinatePermut_[xi]] = data[coordStart_+xi];
                     }            
                     
                     // read elmer gradient
                     vector field(Zero);
 
-                    field[coordinatePermut[0]] = data[gradientLabel+0];
-                    field[coordinatePermut[1]] = data[gradientLabel+1];
+                    field[coordinatePermut_[0]] = data[gradientLabel_+0];
+                    field[coordinatePermut_[1]] = data[gradientLabel_+1];
                     
                     coordinates.append(coord);
                     gradient.append(field);
                     // read elmer value
-                    value.append(data[valueLabel]);
+                    value.append(data[valueLabel_]);
                 }
             }
         }
@@ -212,10 +210,10 @@ int main(int argc, char *argv[])
              << endl;
                 
         Info<< "Interpolation method: "
-            << method << endl;
+            << method_ << endl;
 
         // Interpolation method with nearest neighbor
-        if (method == "nearest")
+        if (method_ == "nearest")
         {
             forAll(T.boundaryField()[currPatchID], facesi) 
             {
@@ -224,10 +222,12 @@ int main(int argc, char *argv[])
                 vector por = p;
 
                 // project to xz plane
-                scalar rr = Foam::sqrt( p.x()*p.x() + p.y()*p.y() );
+                scalar rr = Foam::sqrt(
+                             p.x()*p.x() + p.z()*p.z() 
+                             );
                 p.x() = rr;
-                p.y() = 0;
-                p.z() = p.z();
+                p.y() = p.y();
+                p.z() = 0;
                 // Info << "; projected mesh point = " << p;
 
                 // find nearest neighbour
@@ -273,31 +273,35 @@ int main(int argc, char *argv[])
                     if (p.x()>1e-10) 
                     {
                         vecRot.x() = gradient[minpoint].x()*por.x()/(p.x()+SMALL);
-                        vecRot.y() = gradient[minpoint].x()*por.y()/(p.x()+SMALL); 
+                        vecRot.z() = gradient[minpoint].x()*por.z()/(p.x()+SMALL); 
                     }
                     else 
                     {
                         vecRot.x() = 0;
-                        vecRot.y() = 0;
+                        vecRot.z() = 0;
                     }
                     
-                    vecRot.z() = gradient[minpoint].z();
+                    vecRot.y() = gradient[minpoint].y();
                     
                     vector N = Nf[facesi];
                     gradT[facesi] = ( N & vecRot ); // grad in normal direction
-                    if (debug) {gradTComp[facesi] = vecRot;}
+                    if (debug_) {gradTComp[facesi] = vecRot;}
                 }
             } // forAll
         Info<< "Max distance between mapping = " << maxdistall << endl;
         } // if nearest
 
         // Interpolation method linear between two nearest points
-        if (method == "interp1")
+        if (method_ == "interp1")
         {
             forAll(T.boundaryField()[currPatchID], facesi) 
             {
                 vector p = mesh.Cf().boundaryField()[currPatchID][facesi];
                 vector por = p;
+                scalar rr = Foam::sqrt( p.x()*p.x() + p.z()*p.z() );
+                p.x() = rr;
+                p.y() = p.y();
+                p.z() = 0;
                 // find 2 nearest points to p
                 label minpoint1=0, minpoint2=0;
                 scalar mindist = 1000;
@@ -353,14 +357,14 @@ int main(int argc, char *argv[])
                     else 
                     {
                         vecRot.x() = 0;
-                        vecRot.y() = 0;
+                        vecRot.z() = 0;
                     }
                     
                     vecRot.y() = interpValue.y();
                     
                     vector N = Nf[facesi];
                     gradT[facesi] = ( N & vecRot ); // grad in normal direction
-                    if(debug){gradTComp[facesi] = vecRot;} // grad components
+                    if(debug_){gradTComp[facesi] = vecRot;} // grad components
 
                 }
             } // forAll
@@ -389,7 +393,7 @@ int main(int argc, char *argv[])
         Info<< "Writing value" << endl;
         T.write();
 
-        if (debug)
+        if (debug_)
         {
             // write out data for testing
             const word testDir = "debugElmerToFoamBC";
@@ -403,9 +407,11 @@ int main(int argc, char *argv[])
 
             OFstream osTesting
             (
-                testDir/boundaryDict.keys()[boundaryI]
+                testDir/boundaryDict_.keys()[boundaryI]
             );
-
+            // write header
+            osTesting << "x y z T gradT gradTx gradTy gradTz" << nl;
+            // write values
             forAll (T.boundaryField()[currPatchID], facesi)
             {
                 vector p = mesh.Cf().boundaryField()[currPatchID][facesi];
@@ -423,7 +429,7 @@ int main(int argc, char *argv[])
             // Write out points to constant/boundaryData/*
             const word outDir = runTime.constant()/
                                 "boundaryData"/
-                                boundaryDict.keys()[boundaryI];
+                                boundaryDict_.keys()[boundaryI];
 
             if (!exists(outDir/"0"))
             {
