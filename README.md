@@ -32,4 +32,17 @@ Example of the boundary dictionary specification:
     {
         <patchName>            "<fileName>";
     }
-\*---------------------------------------------------------------------------*/
+
+## License
+
+nemoblock is published under the [GPLv3 license](https://www.gnu.org/licenses/gpl-3.0.html).
+
+## Acknowledgements
+
+[This project](https://www.researchgate.net/project/NEMOCRYS-Next-Generation-Multiphysical-Models-for-Crystal-Growth-Processes) has received funding from the European Research Council (ERC) under the European Union's Horizon 2020 research and innovation programme (grant agreement No 851768).
+
+<img src="https://raw.githubusercontent.com/nemocrys/nemoblock/master/EU-ERC.png">
+
+## Contribution
+
+Any help to improve this package is very welcome!
