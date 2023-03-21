@@ -1,16 +1,64 @@
-/*
+/*---------------------------------------------------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     |
+    \\  /    A nd           | www.openfoam.com
+     \\/     M anipulation  |
+-------------------------------------------------------------------------------
+    Copyright (C) 2023 AUTHOR,AFFILIATION
+-------------------------------------------------------------------------------
+License
+    This file is part of OpenFOAM.
 
---------------------------------------------------------------------------------
+    OpenFOAM is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
 
---------------------------------------------------------------------------------
+    OpenFOAM is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
 
-*/
+    You should have received a copy of the GNU General Public License
+    along with OpenFOAM.  If not, see <http://www.gnu.org/licenses/>.
+
+Application
+    elmerToFoamBC
+
+Description
+    Maps boundary values from Elmer to an OpenFOAM mesh, including rotation to
+    3D depending on options provided in elmerToFoamDict.
+
+Usage
+    \b elmerToFoamBC
+    \table
+        Property     | Description             | Required    | Default value
+        coordinatePermut    | permutation of coordinates | no         | (0 1 2)
+        coordStartColumn    | column of first coordinate in Elmer files | yes | -
+        valueLabel          | column of value in elmer files | yes | -
+        gradientLabel       | column of gradient in elmer files | yes | -
+        gradientSize        | number of gradient components in elmer files | yes | -
+        mapMethod           | interpolation method (interp1 or nearest) | no | interp1
+        debug               | debug flag for additional output           | no | 0
+        boundary            | dictionary with Elmer file names for OpenFOAM boundaries | yes | -
+    \endtable
+
+    Example of the boundary dictionary specification:
+    \verbatim
+    boundary 
+    {
+        <patchName>            "<fileName>";
+    }
+\*---------------------------------------------------------------------------*/
 
 #include "argList.H"
 #include "IFstream.H"
 #include "fvCFD.H"
 
 using namespace Foam;
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 int main(int argc, char *argv[])
 {
@@ -30,7 +78,22 @@ int main(int argc, char *argv[])
     Info << "List of all available patches:" << endl
          << (mesh.boundary().size()) << endl
         << "(" << endl;
-    
+    // get mesh dimension
+    label dim = 3;
+    forAll (mesh.boundary(),patchI)
+    {
+        if
+        (
+            mesh.boundary()[patchI].type() == "wedge"
+            ||
+            mesh.boundary()[patchI].type() == "empty"
+        )
+        {
+            dim = dim - 1;
+            break;
+        }
+    }
+
     forAll (mesh.boundary(),patchI)
     {
         Info << mesh.boundary()[patchI].name() << endl;
@@ -53,8 +116,8 @@ int main(int argc, char *argv[])
     );
     
     // INPUT
-    // debug_ flag
-    const label debug_ = elmerToFoamDict.getOrDefault<label>("debug", true);
+    // debug_ flag; currenty only two levels
+    const label debug_ = elmerToFoamDict.getOrDefault<label>("debug", 1);
     // interpolation method
     const word method_ = elmerToFoamDict.getOrDefault<word>("mapMethod", "interp1");
     if (!(method_ == "nearest" ||method_ == "interp1"))
@@ -64,14 +127,16 @@ int main(int argc, char *argv[])
             << "nearest\ninterp1";
     }
     // permutation (x,y,z) -> (x,z,y)
-    const vector coordinatePermut_(elmerToFoamDict.lookup("coordinatePermut"));
+    const vector coordinatePermut_ = elmerToFoamDict.getOrDefault<vector>("coordinatePermut", vector(0, 1, 2));
     // column of x
     const label coordStart_(elmerToFoamDict.get<label>("coordStartColumn"));
     // column of value to read
     const label valueLabel_(elmerToFoamDict.get<label>("valueLabel"));
     // column of gradient to read
     const label gradientLabel_(elmerToFoamDict.get<label>("gradientLabel"));
-
+    // should the rotate 
+    const label rot2D_ = elmerToFoamDict.getOrDefault<label>("rot2D", 0);
+    // read boundary dictionary
     const dictionary& boundaryDict_(elmerToFoamDict.subDict("boundary"));
     word file(" ");
 
@@ -212,13 +277,13 @@ int main(int argc, char *argv[])
         Info<< "Interpolation method: "
             << method_ << endl;
 
+        // TODO: Combine interpolation methods and simplify for readability
         // Interpolation method with nearest neighbor
         if (method_ == "nearest")
         {
             forAll(T.boundaryField()[currPatchID], facesi) 
             {
                 vector p = mesh.Cf().boundaryField()[currPatchID][facesi];
-                // Info << "current mesh point = " << p;
                 vector por = p;
 
                 // project to xz plane
@@ -471,3 +536,5 @@ int main(int argc, char *argv[])
     Info << endl << "End\n" << endl;
     return 0;
 }
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
