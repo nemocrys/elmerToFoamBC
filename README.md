@@ -3,7 +3,7 @@ Maps boundary values from Elmer to an OpenFOAM mesh, including rotation to
 3D depending on options provided in elmerToFoamDict. Developed for OpenFOAM-v2112.
 
 ## Compilation 
-    wmake emlerToFoamBC
+    wmake elmerToFoamBC
 
 ## Application
     elmerToFoamBC
