@@ -287,13 +287,14 @@ int main(int argc, char *argv[])
                 vector por = p;
 
                 // project to xz plane
+                Info << "mesh point = " << p;
                 scalar rr = Foam::sqrt(
                              p.x()*p.x() + p.z()*p.z() 
                              );
                 p.x() = rr;
                 p.y() = p.y();
                 p.z() = 0;
-                // Info << "; projected mesh point = " << p;
+                Info << "; projected mesh point = " << p << endl;
 
                 // find nearest neighbour
                 scalar mindist = 1000;
@@ -363,10 +364,15 @@ int main(int argc, char *argv[])
             {
                 vector p = mesh.Cf().boundaryField()[currPatchID][facesi];
                 vector por = p;
-                scalar rr = Foam::sqrt( p.x()*p.x() + p.z()*p.z() );
+                // project to xz plane
+                Info << "mesh point = " << p;
+                scalar rr = Foam::sqrt(
+                             p.x()*p.x() + p.z()*p.z() 
+                             );
                 p.x() = rr;
                 p.y() = p.y();
                 p.z() = 0;
+                Info << "; projected mesh point = " << p << endl;
                 // find 2 nearest points to p
                 label minpoint1=0, minpoint2=0;
                 scalar mindist = 1000;
