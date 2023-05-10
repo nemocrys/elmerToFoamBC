@@ -93,7 +93,7 @@ int main(int argc, char *argv[])
             break;
         }
     }
-
+    Info << "dim = " << dim << endl;
     forAll (mesh.boundary(),patchI)
     {
         Info << mesh.boundary()[patchI].name() << endl;
@@ -279,40 +279,47 @@ int main(int argc, char *argv[])
 
         // TODO: Combine interpolation methods and simplify for readability
         // Interpolation method with nearest neighbor
-        if (method_ == "nearest")
+        forAll(T.boundaryField()[currPatchID], facesi) 
         {
-            forAll(T.boundaryField()[currPatchID], facesi) 
+            vector p = mesh.Cf().boundaryField()[currPatchID][facesi];
+            vector por = p;
+            vector axis_(0,1,0);
+            vector rotDir_(0,0,1);
+            label rr_dir;
+            // calculte r
+            scalar rr = 0;
+            Info << p << endl;
+            // calculate radius rr from axis_
+            forAll (p, xi)
             {
-                vector p = mesh.Cf().boundaryField()[currPatchID][facesi];
-                vector por = p;
+                rr = rr + (1-axis_[xi])*p[xi]*p[xi];
+            }
+            rr = Foam::sqrt(rr);
+            scalar rr0 = Foam::sqrt( p.x()*p.x() + p.z()*p.z() );
+            Info << "rr = " << rr << endl;
+            Info << "rr = " << rr0 << endl;
+            p = (vector(1,1,1)-axis_-rotDir_)*rr + (axis_ & p)*axis_;
 
-                // project to xz plane
-                scalar rr = Foam::sqrt(
-                             p.x()*p.x() + p.z()*p.z() 
-                             );
-                p.x() = rr;
-                p.y() = p.y();
-                p.z() = 0;
-                // Info << "; projected mesh point = " << p;
-
-                // find nearest neighbour
-                scalar mindist = 1000;
-                label minpoint = 0;
-                for (label i=0; i<coordinates.size(); i++) 
-                {
-                    scalar dist = mag(p-coordinates[i]);
-                    if (dist < mindist) 
-                    { 
-                        mindist = dist;  
-                        minpoint = i; 
-                    }
-                }
-
-                if (mindist>maxdistall) 
+            // find nearest neighbour
+            scalar mindist = 1000;
+            label minpoint = 0;
+            for (label i=0; i<coordinates.size(); i++) 
+            {
+                scalar dist = mag(p-coordinates[i]);
+                if (dist < mindist) 
                 { 
-                    maxdistall = mindist; 
+                    mindist = dist;  
+                    minpoint = i; 
                 }
+            }
 
+            if (mindist>maxdistall) 
+            { 
+                maxdistall = mindist; 
+            }
+
+            if (method_ == "nearest")
+            {
                 if
                 (
                     T.boundaryField()[currPatchID].type() 
@@ -352,21 +359,9 @@ int main(int argc, char *argv[])
                     gradT[facesi] = ( N & vecRot ); // grad in normal direction
                     if (debug_) {gradTComp[facesi] = vecRot;}
                 }
-            } // forAll
-        Info<< "Max distance between mapping = " << maxdistall << endl;
-        } // if nearest
-
-        // Interpolation method linear between two nearest points
-        if (method_ == "interp1")
-        {
-            forAll(T.boundaryField()[currPatchID], facesi) 
+            }
+            else if (method_ == "interp1")
             {
-                vector p = mesh.Cf().boundaryField()[currPatchID][facesi];
-                vector por = p;
-                scalar rr = Foam::sqrt( p.x()*p.x() + p.z()*p.z() );
-                p.x() = rr;
-                p.y() = p.y();
-                p.z() = 0;
                 // find 2 nearest points to p
                 label minpoint1=0, minpoint2=0;
                 scalar mindist = 1000;
