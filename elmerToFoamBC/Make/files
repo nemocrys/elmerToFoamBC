@@ -1,4 +1,4 @@
 
 elmerToFoamBC.C
 
-EXE = $(FOAM_APPBIN)/elmerToFoamBC
+EXE = $(FOAM_USER_APPBIN)/elmerToFoamBC

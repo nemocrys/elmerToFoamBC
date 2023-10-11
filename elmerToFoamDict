@@ -18,22 +18,30 @@ FoamFile
 
 coordinatePermut    (0 2 1); // (x,y,z) -> (x,z,y)
 
-coordStartColumn    3; // column of first coordinate in elmer files
+coordStartColumn    3;
 
-valueLabel    13; // column of value in elmer files
+valueLabel    6;
 
-gradientLabel    20; // column of first gradient component in elmer files
+valueName     "T";
 
-gradientSize     2; // number of gradient components in elmer files
+gradientLabel    7;
 
-mapMethod       interp1; //#nearest (optional)
+gradientSize     2;
 
-debug		true; // debug flag for additional output
+gradientName     "gradT";
 
-boundary //(boundaries in this dict are overwritten)
+mapMethod       interp1; //#nearest
+
+rot2D           1; // 1: rotate elmer values along axis in rotDir;
+
+axis            (0 0 1); // axis of rotation in OpenFOAM
+
+rotDir          (0 1 0); // direction of rotation in OpenFOAM
+
+boundary
 {
 	freeSurf	    "save_line_melt_surf.dat";
-    crysInter	    "save_line_melt_crys.dat";
+    crysInter	    "save_line_melt_crys_relaxed.dat";
     crucibleSide	"save_line_crc_melt.dat";
     crucibleBot	    "save_line_crc_melt.dat";
 }
