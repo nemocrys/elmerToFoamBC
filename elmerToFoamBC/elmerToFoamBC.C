@@ -242,6 +242,7 @@ int main(int argc, char *argv[])
 
                     field[coordinatePermut_[0]] = data[gradientLabel_+0];
                     field[coordinatePermut_[1]] = data[gradientLabel_+1];
+                    field[coordinatePermut_[2]] = data[gradientLabel_+2];
                     // Info << "data = " << data << "; field = " << field << endl;
                     coordinates.append(coord);
                     gradient.append(field);
