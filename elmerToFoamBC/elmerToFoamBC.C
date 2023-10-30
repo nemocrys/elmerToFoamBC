@@ -134,6 +134,8 @@ int main(int argc, char *argv[])
     const label valueLabel_(elmerToFoamDict.get<label>("valueLabel"));
     // column of gradient to read
     const label gradientLabel_(elmerToFoamDict.get<label>("gradientLabel"));
+    // size of gradient in Elmer 
+    const label gradientSize_(elmerToFoamDict.get<label>("gradientSize"));
     // should the rotate 
     const bool rot2D_ = elmerToFoamDict.getOrDefault<label>("rot2D", 0);
     // read boundary dictionary
@@ -240,10 +242,10 @@ int main(int argc, char *argv[])
                     // read elmer gradient
                     vector field(Zero);
 
-                    field[coordinatePermut_[0]] = data[gradientLabel_+0];
-                    field[coordinatePermut_[1]] = data[gradientLabel_+1];
-                    field[coordinatePermut_[2]] = data[gradientLabel_+2];
-                    // Info << "data = " << data << "; field = " << field << endl;
+                    for (int i = 0; i<gradientSize_; i=i+1)
+                    {
+                        field[coordinatePermut_[i]] = data[gradientLabel_+i];
+                    }
                     coordinates.append(coord);
                     gradient.append(field);
                     // read elmer value
